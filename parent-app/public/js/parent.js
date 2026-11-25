@@ -12,6 +12,10 @@ const state = {
   historyPoints: [],
   historyStats: null,
   staySpots: [],
+  calls: [],
+  callFilter: 'all',
+  screenRecordings: [],
+  activeStageView: 'map',
   followLive: true,
   playbackIndex: -1,
   playbackTimer: null,
@@ -65,6 +69,21 @@ const els = {
   playbackSlider: document.getElementById('playbackSlider'),
   snapLiveBtn: document.getElementById('snapLiveBtn'),
   playbackTime: document.getElementById('playbackTime'),
+  viewMapTab: document.getElementById('viewMapTab'),
+  viewCallsTab: document.getElementById('viewCallsTab'),
+  viewScreenTab: document.getElementById('viewScreenTab'),
+  callsCountBadge: document.getElementById('callsCountBadge'),
+  screenCountBadge: document.getElementById('screenCountBadge'),
+  playbackBar: document.getElementById('playbackBar'),
+  callsPanel: document.getElementById('callsPanel'),
+  callsSubtitle: document.getElementById('callsSubtitle'),
+  callFilterPills: document.getElementById('callFilterPills'),
+  refreshCallsBtn: document.getElementById('refreshCallsBtn'),
+  callsList: document.getElementById('callsList'),
+  screenPanel: document.getElementById('screenPanel'),
+  screenSubtitle: document.getElementById('screenSubtitle'),
+  refreshScreenBtn: document.getElementById('refreshScreenBtn'),
+  screenList: document.getElementById('screenList'),
 };
 
 const map = new GuardianMap(els.mapContainer);
@@ -226,6 +245,28 @@ function connectEventStream() {
       renderStaySpots();
       renderTimeline();
       updateStatsFromPoints();
+    }
+  });
+
+  es.addEventListener('call_recorded', (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.childId === state.selectedChildId && msg.call) {
+      const exists = state.calls.some((c) => c.id === msg.call.id);
+      if (!exists) {
+        state.calls.unshift(msg.call);
+      }
+      renderCalls();
+    }
+  });
+
+  es.addEventListener('screen_recorded', (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.childId === state.selectedChildId && msg.recording) {
+      const exists = state.screenRecordings.some((r) => r.id === msg.recording.id);
+      if (!exists) {
+        state.screenRecordings.unshift(msg.recording);
+      }
+      renderScreenRecordings();
     }
   });
 }
@@ -604,7 +645,7 @@ async function loadChildren() {
     state.selectedChildId = state.children[0]?.id || null;
   }
   renderChildren();
-  await loadHistory(true);
+  await Promise.all([loadHistory(true), loadCalls(), loadScreenRecordings()]);
 }
 
 async function selectChild(childId) {
@@ -612,7 +653,7 @@ async function selectChild(childId) {
   state.selectedChildId = childId;
   state.followLive = true;
   renderChildren();
-  await loadHistory(true);
+  await Promise.all([loadHistory(true), loadCalls(), loadScreenRecordings()]);
 }
 
 async function deleteChild(childId) {
@@ -620,8 +661,184 @@ async function deleteChild(childId) {
   if (state.selectedChildId === childId) {
     state.selectedChildId = null;
     state.historyPoints = [];
+    state.calls = [];
+    state.screenRecordings = [];
   }
   await loadChildren();
+}
+
+function formatDuration(sec) {
+  const total = Math.max(0, Math.round(Number(sec) || 0));
+  const mins = Math.floor(total / 60);
+  const rem = total % 60;
+  return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+}
+
+function formatFileSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function setStageView(view) {
+  state.activeStageView = view;
+  const isMap = view === 'map';
+  const isCalls = view === 'calls';
+  const isScreen = view === 'screen';
+  els.viewMapTab.classList.toggle('active', isMap);
+  els.viewCallsTab.classList.toggle('active', isCalls);
+  els.viewScreenTab.classList.toggle('active', isScreen);
+  els.mapContainer.classList.toggle('hidden', !isMap);
+  els.playbackBar.classList.toggle('hidden', !isMap);
+  els.callsPanel.classList.toggle('hidden', !isCalls);
+  els.screenPanel.classList.toggle('hidden', !isScreen);
+  if (isMap) {
+    map.resize();
+  }
+}
+
+async function loadCalls() {
+  if (!state.selectedChildId) {
+    state.calls = [];
+    renderCalls();
+    return;
+  }
+  const data = await apiFetch(
+    `/api/children/${encodeURIComponent(state.selectedChildId)}/calls?limit=150`
+  );
+  state.calls = data.calls || [];
+  renderCalls();
+}
+
+function renderCalls() {
+  const child = state.children.find((c) => c.id === state.selectedChildId);
+  els.callsSubtitle.textContent = child
+    ? `Automatically uploaded incoming & outgoing call recordings from ${child.name}`
+    : 'Select a paired child device to listen to automatically uploaded calls.';
+
+  const filtered =
+    state.callFilter === 'all'
+      ? state.calls
+      : state.calls.filter((c) => c.direction === state.callFilter);
+
+  els.callsCountBadge.textContent = String(state.calls.length);
+
+  if (!child) {
+    els.callsList.innerHTML = '<div class="empty-state">Select a child profile first.</div>';
+    return;
+  }
+  if (filtered.length === 0) {
+    els.callsList.innerHTML =
+      '<div class="empty-state">No call recordings in this category yet.</div>';
+    return;
+  }
+
+  els.callsList.innerHTML = filtered
+    .map((c) => {
+      const dirClass = c.direction === 'incoming' ? 'incoming' : 'outgoing';
+      const dirLabel = c.direction === 'incoming' ? 'Incoming' : 'Outgoing';
+      const audioSrc = `/api/calls/${encodeURIComponent(c.id)}/audio?token=${encodeURIComponent(state.token)}`;
+      return `
+        <div class="call-card" data-call-id="${escapeHtml(c.id)}">
+          <div class="call-card-top">
+            <div class="call-card-meta">
+              <span class="call-dir-badge ${dirClass}">${dirLabel}</span>
+              <span class="call-number">${escapeHtml(c.phoneNumber || 'Unknown')}</span>
+            </div>
+            <div class="call-sub">
+              ${formatDateTime(c.startedAt)} · ${formatDuration(c.durationSec)} · ${formatFileSize(c.fileSize)}
+            </div>
+          </div>
+          <div class="call-audio-row">
+            <audio class="call-audio-player" controls preload="none" src="${audioSrc}"></audio>
+            <a class="btn btn-secondary btn-sm" href="${audioSrc}" download="call-${dirClass}-${escapeHtml(c.id)}.m4a">Download</a>
+            <button class="btn btn-danger btn-sm" data-delete-call="${escapeHtml(c.id)}" type="button">Delete</button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  for (const btn of els.callsList.querySelectorAll('[data-delete-call]')) {
+    btn.addEventListener('click', async () => {
+      const callId = btn.dataset.deleteCall;
+      await apiFetch(`/api/calls/${encodeURIComponent(callId)}`, { method: 'DELETE' });
+      state.calls = state.calls.filter((c) => c.id !== callId);
+      renderCalls();
+    });
+  }
+}
+
+async function loadScreenRecordings() {
+  if (!state.selectedChildId) {
+    state.screenRecordings = [];
+    renderScreenRecordings();
+    return;
+  }
+  const data = await apiFetch(
+    `/api/children/${encodeURIComponent(state.selectedChildId)}/screen-recordings?limit=100`
+  );
+  state.screenRecordings = data.recordings || [];
+  renderScreenRecordings();
+}
+
+function renderScreenRecordings() {
+  const child = state.children.find((c) => c.id === state.selectedChildId);
+  els.screenSubtitle.textContent = child
+    ? `Automatically uploaded screen recording clips from ${child.name}`
+    : 'Select a paired child device to watch automatically uploaded screen clips.';
+
+  els.screenCountBadge.textContent = String(state.screenRecordings.length);
+
+  if (!child) {
+    els.screenList.innerHTML = '<div class="empty-state">Select a child profile first.</div>';
+    return;
+  }
+  if (state.screenRecordings.length === 0) {
+    els.screenList.innerHTML = '<div class="empty-state">No screen recordings uploaded yet.</div>';
+    return;
+  }
+
+  els.screenList.innerHTML = state.screenRecordings
+    .map((r) => {
+      const videoSrc = `/api/screen-recordings/${encodeURIComponent(r.id)}/video?token=${encodeURIComponent(state.token)}`;
+      const resLabel = r.width && r.height ? `${r.width}×${r.height}` : 'Display';
+      const fpsLabel = r.fps ? `${r.fps} fps` : '';
+      const metaParts = [
+        formatDateTime(r.startedAt),
+        formatDuration(r.durationSec),
+        resLabel,
+        fpsLabel,
+        formatFileSize(r.fileSize),
+      ].filter(Boolean);
+      return `
+        <div class="call-card" data-screen-id="${escapeHtml(r.id)}">
+          <div class="call-card-top">
+            <div class="call-card-meta">
+              <span class="call-dir-badge outgoing">Screen</span>
+              <span class="call-number">${formatDateTime(r.startedAt)}</span>
+            </div>
+            <div class="call-sub">${metaParts.slice(1).join(' · ')}</div>
+          </div>
+          <video class="screen-video-player" controls preload="metadata" playsinline src="${videoSrc}"></video>
+          <div class="call-audio-row">
+            <a class="btn btn-secondary btn-sm" href="${videoSrc}" download="screen-${escapeHtml(r.id)}.mp4">Download MP4</a>
+            <button class="btn btn-danger btn-sm" data-delete-screen="${escapeHtml(r.id)}" type="button">Delete</button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  for (const btn of els.screenList.querySelectorAll('[data-delete-screen]')) {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.deleteScreen;
+      await apiFetch(`/api/screen-recordings/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      state.screenRecordings = state.screenRecordings.filter((r) => r.id !== id);
+      renderScreenRecordings();
+    });
+  }
 }
 
 async function loadHistory(fitMap = false) {
@@ -790,6 +1007,23 @@ els.snapLiveBtn.addEventListener('click', () => {
   syncMapAndControls(true);
   renderTimeline();
 });
+
+els.viewMapTab.addEventListener('click', () => setStageView('map'));
+els.viewCallsTab.addEventListener('click', () => setStageView('calls'));
+els.viewScreenTab.addEventListener('click', () => setStageView('screen'));
+els.refreshCallsBtn.addEventListener('click', () => loadCalls());
+els.refreshScreenBtn.addEventListener('click', () => loadScreenRecordings());
+
+for (const btn of els.callFilterPills.querySelectorAll('.range-btn')) {
+  btn.addEventListener('click', () => {
+    for (const b of els.callFilterPills.querySelectorAll('.range-btn')) {
+      b.classList.remove('active');
+    }
+    btn.classList.add('active');
+    state.callFilter = btn.dataset.direction || 'all';
+    renderCalls();
+  });
+}
 
 setInterval(() => {
   if (state.token && state.children.length > 0) {

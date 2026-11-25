@@ -6,10 +6,9 @@ Two completely separate, zero-dependency applications built with **Node.js 24 (`
    - Guardian registration & login, child profile creation, 6-character pairing codes.
    - Live 24/7 map with Server-Sent Events (`/api/events`) and route history timeline (`1H`, `6H`, `24H`, `7D` + playback scrubber).
    - Hosts the SQLite database and REST/SSE API.
-2. **Child Application (`child-app/`, Port `3002`)**:
-   - Standalone mobile-friendly PWA (`manifest.webmanifest` + `sw.js`) with zero Parent Dashboard UI or links.
-   - Connects via 6-character pairing code, displays a transparent `"24/7 Location Sharing Active"` status banner, tracks high-accuracy GPS + Screen Wake Lock + offline queue (`localStorage`), and includes a desktop Walk Simulator for testing.
-   - Forwards `/api/*` telemetry requests to `PARENT_API_URL` (default `http://127.0.0.1:3001`), or lets you specify a custom Parent Server URL.
+2. **Child Application (`child-app/` PWA & `android-child-app/` Native APK)**:
+   - Standalone mobile-friendly PWA (`manifest.webmanifest` + `sw.js`) and native Kotlin Android app (`android-child-app/`) with zero Parent Dashboard UI or links.
+   - Connects via a single 6-character pairing code, displays transparent foreground notifications, and merges all 3 protections into one app: 24/7 GPS location tracking, automatic incoming/outgoing call recording, and segmented phone display screen recording (`MediaProjection`) sent straight to the Parent App with zero permanent local storage.
 
 ## Running Both Applications
 

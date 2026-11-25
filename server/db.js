@@ -64,6 +64,44 @@ function createDatabase(dbPath) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_child_recorded_unique
       ON locations(child_id, recorded_at, lat, lng);
+
+    CREATE TABLE IF NOT EXISTS call_recordings (
+      id TEXT PRIMARY KEY,
+      child_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('incoming', 'outgoing')),
+      phone_number TEXT,
+      started_at TEXT NOT NULL,
+      ended_at TEXT NOT NULL,
+      duration_sec INTEGER NOT NULL DEFAULT 0,
+      mime_type TEXT NOT NULL DEFAULT 'audio/mp4',
+      file_name TEXT NOT NULL,
+      file_size INTEGER NOT NULL DEFAULT 0,
+      audio_source TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (child_id) REFERENCES children(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_calls_child_started
+      ON call_recordings(child_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS screen_recordings (
+      id TEXT PRIMARY KEY,
+      child_id TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      ended_at TEXT NOT NULL,
+      duration_sec INTEGER NOT NULL DEFAULT 0,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      fps INTEGER NOT NULL DEFAULT 0,
+      mime_type TEXT NOT NULL DEFAULT 'video/mp4',
+      file_name TEXT NOT NULL,
+      file_size INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (child_id) REFERENCES children(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_screen_recordings_child_started
+      ON screen_recordings(child_id, started_at DESC);
   `);
 
   const statements = {
@@ -211,6 +249,78 @@ function createDatabase(dbPath) {
         AND recorded_at <= ?
       ORDER BY recorded_at ASC, id ASC
       LIMIT ?
+    `),
+    insertCallRecording: db.prepare(`
+      INSERT INTO call_recordings (
+        id, child_id, direction, phone_number, started_at, ended_at,
+        duration_sec, mime_type, file_name, file_size, audio_source, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    listCallsByChild: db.prepare(`
+      SELECT id, child_id, direction, phone_number, started_at, ended_at,
+             duration_sec, mime_type, file_name, file_size, audio_source, created_at
+      FROM call_recordings
+      WHERE child_id = ?
+      ORDER BY started_at DESC, created_at DESC
+      LIMIT ?
+    `),
+    listCallsByChildAndDirection: db.prepare(`
+      SELECT id, child_id, direction, phone_number, started_at, ended_at,
+             duration_sec, mime_type, file_name, file_size, audio_source, created_at
+      FROM call_recordings
+      WHERE child_id = ? AND direction = ?
+      ORDER BY started_at DESC, created_at DESC
+      LIMIT ?
+    `),
+    findCallByIdAndParent: db.prepare(`
+      SELECT cr.id, cr.child_id, cr.direction, cr.phone_number, cr.started_at, cr.ended_at,
+             cr.duration_sec, cr.mime_type, cr.file_name, cr.file_size, cr.audio_source, cr.created_at
+      FROM call_recordings cr
+      JOIN children c ON c.id = cr.child_id
+      WHERE cr.id = ? AND c.parent_id = ?
+    `),
+    listCallFilesForChild: db.prepare(`
+      SELECT id, child_id, file_name
+      FROM call_recordings
+      WHERE child_id = ?
+    `),
+    deleteCallByIdAndParent: db.prepare(`
+      DELETE FROM call_recordings
+      WHERE id = ?
+        AND child_id IN (SELECT id FROM children WHERE parent_id = ?)
+    `),
+    insertScreenRecording: db.prepare(`
+      INSERT INTO screen_recordings (
+        id, child_id, started_at, ended_at, duration_sec, width, height, fps,
+        mime_type, file_name, file_size, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    listScreenRecordingsByChild: db.prepare(`
+      SELECT id, child_id, started_at, ended_at, duration_sec, width, height, fps,
+             mime_type, file_name, file_size, created_at
+      FROM screen_recordings
+      WHERE child_id = ?
+      ORDER BY started_at DESC, created_at DESC
+      LIMIT ?
+    `),
+    findScreenRecordingByIdAndParent: db.prepare(`
+      SELECT sr.id, sr.child_id, sr.started_at, sr.ended_at, sr.duration_sec, sr.width, sr.height,
+             sr.fps, sr.mime_type, sr.file_name, sr.file_size, sr.created_at
+      FROM screen_recordings sr
+      JOIN children c ON c.id = sr.child_id
+      WHERE sr.id = ? AND c.parent_id = ?
+    `),
+    listScreenRecordingFilesForChild: db.prepare(`
+      SELECT id, child_id, file_name
+      FROM screen_recordings
+      WHERE child_id = ?
+    `),
+    deleteScreenRecordingByIdAndParent: db.prepare(`
+      DELETE FROM screen_recordings
+      WHERE id = ?
+        AND child_id IN (SELECT id FROM children WHERE parent_id = ?)
     `),
   };
 

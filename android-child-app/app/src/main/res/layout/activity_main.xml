@@ -24,7 +24,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="18dp"
-            android:text="Native 24/7 Background Safety Tracker"
+            android:text="24/7 Location, Auto Call &amp; Screen Protection App"
             android:textColor="#94A3B8"
             android:textSize="14sp" />
 
@@ -129,7 +129,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:backgroundTint="#2563EB"
-                android:text="Connect &amp; Start 24/7 Tracking"
+                android:text="Connect &amp; Start 24/7 Protection"
                 android:textColor="#FFFFFF" />
         </LinearLayout>
 
@@ -147,7 +147,7 @@
                 android:id="@+id/statusTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="24/7 Location Sharing Active"
+                android:text="24/7 Location &amp; Call Protection Active"
                 android:textColor="#10B981"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -174,10 +174,83 @@
                 android:id="@+id/telemetrySync"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Last synced: -- · Offline queue: 0"
+                android:layout_marginTop="4dp"
+                android:text="Last GPS sync: -- · GPS queue: 0"
                 android:textColor="#94A3B8"
                 android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/lastCallText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Last call: Waiting for incoming/outgoing call..."
+                android:textColor="#F8FAFC"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/callUploadStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Last call sent: -- · Call upload queue: 0"
+                android:textColor="#94A3B8"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/lastScreenText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Last screen clip: Tap switch below to enable screen recording"
+                android:textColor="#F8FAFC"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/screenUploadStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Last screen sent: -- · Screen upload queue: 0"
+                android:textColor="#94A3B8"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="#0B1120"
+                android:padding="10dp"
+                android:text="Cloud-only calls &amp; screen clips: Recordings are temporarily buffered only while uploading and automatically deleted from this phone once received by the Parent App."
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/callRecordingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Auto-record incoming &amp; outgoing calls"
+                android:textColor="#F8FAFC"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/speakerBoostSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Auto-enable speakerphone during calls (improves remote voice capture on Android 10+)"
+                android:textColor="#CBD5E1"
+                android:textSize="13sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/screenRecordingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Auto-record phone display (pauses when screen is off)"
+                android:textColor="#F8FAFC"
+                android:textSize="14sp" />
 
             <Button
                 android:id="@+id/toggleButton"
@@ -194,7 +267,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:backgroundTint="#1E293B"
-                android:text="Allow Background Location &amp; Disable Battery Sleep"
+                android:text="Grant Location, Call &amp; Mic Permissions + Disable Battery Sleep"
                 android:textColor="#60A5FA" />
 
             <Button

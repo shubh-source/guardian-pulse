@@ -137,6 +137,18 @@
       </aside>
 
       <section class="map-stage">
+        <div class="stage-tabs">
+          <button id="viewMapTab" class="stage-tab-btn active" type="button">Live Map &amp; Route</button>
+          <button id="viewCallsTab" class="stage-tab-btn" type="button">
+            Call Recordings
+            <span id="callsCountBadge" class="pill" style="padding: 1px 7px; font-size: 0.7rem">0</span>
+          </button>
+          <button id="viewScreenTab" class="stage-tab-btn" type="button">
+            Screen Recordings
+            <span id="screenCountBadge" class="pill" style="padding: 1px 7px; font-size: 0.7rem">0</span>
+          </button>
+        </div>
+
         <div id="mapContainer" class="map-container">
           <div id="mapHud" class="map-hud">
             <div class="map-hud-title">
@@ -155,7 +167,7 @@
           </div>
         </div>
 
-        <div class="playback-bar">
+        <div id="playbackBar" class="playback-bar">
           <button id="playPauseBtn" class="btn btn-secondary btn-sm" type="button" disabled>
             Play Route
           </button>
@@ -177,6 +189,45 @@
             Live
           </button>
           <span id="playbackTime" class="playback-time">--</span>
+        </div>
+
+        <div id="callsPanel" class="calls-panel hidden">
+          <div class="calls-toolbar">
+            <div>
+              <h2 style="margin: 0; font-size: 1.05rem">Incoming &amp; Outgoing Call Recordings</h2>
+              <div id="callsSubtitle" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px">
+                Select a paired child device to listen to automatically uploaded calls.
+              </div>
+            </div>
+            <div class="calls-toolbar-actions">
+              <div id="callFilterPills" class="call-filter-pills">
+                <button class="range-btn active" data-direction="all" type="button">All</button>
+                <button class="range-btn" data-direction="incoming" type="button">Incoming</button>
+                <button class="range-btn" data-direction="outgoing" type="button">Outgoing</button>
+              </div>
+              <button id="refreshCallsBtn" class="btn btn-secondary btn-sm" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="callsList" class="calls-list">
+            <div class="empty-state">No call recordings uploaded yet.</div>
+          </div>
+        </div>
+
+        <div id="screenPanel" class="calls-panel hidden">
+          <div class="calls-toolbar">
+            <div>
+              <h2 style="margin: 0; font-size: 1.05rem">Automatic Screen Recordings</h2>
+              <div id="screenSubtitle" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px">
+                Select a paired child device to watch automatically uploaded screen clips.
+              </div>
+            </div>
+            <div class="calls-toolbar-actions">
+              <button id="refreshScreenBtn" class="btn btn-secondary btn-sm" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="screenList" class="calls-list">
+            <div class="empty-state">No screen recordings uploaded yet.</div>
+          </div>
         </div>
       </section>
     </main>

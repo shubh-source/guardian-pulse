@@ -4,9 +4,11 @@ A native Kotlin Android application that connects directly to the **Parent App**
 
 ## Features
 - **True 24/7 Foreground Location Service** (`LocationTrackingService.kt`) with a persistent transparent Android notification.
-- **Auto-Start on Reboot** (`BootCompletedReceiver.kt`) so tracking resumes automatically after a phone restart.
-- **Offline SQLite Queue** (`OfflineQueueHelper.kt`) storing up to 10,000 points locally when offline and batch-syncing to `/api/locations` as soon as network returns.
-- **Permissions Flow**: Foreground + Background Location (*Allow all the time*), Notifications, and Battery Optimization exemption.
+- **Automatic Incoming & Outgoing Call Recording** (`CallRecorderService.kt` + `CallStateReceiver.kt`) using standard foreground microphone recording (`VOICE_RECOGNITION` / `MIC`), immediately streaming finished calls to the Parent App (`POST /api/calls`) with **zero permanent local storage** on the child phone.
+- **Automatic Display Screen Recording** (`ScreenRecorderService.kt`) using Android `MediaProjection` (`foregroundServiceType="mediaProjection"`), recording 60-second 720p MP4 clips while the phone display is on, pausing automatically when the screen turns off, and streaming clips to `POST /api/screen-recordings` with immediate local cleanup.
+- **Auto-Start on Reboot** (`BootCompletedReceiver.kt`) so location and call protection resume automatically after a phone restart (and posts a tap-to-resume prompt for `MediaProjection` screen recording as required by Android OS).
+- **Offline Queues**: `OfflineQueueHelper.kt` buffers up to 10,000 GPS points offline; `PendingUploadStore.kt` and `PendingScreenUploadStore.kt` temporarily buffer call audio and screen clips in app cache if offline and delete each local file immediately once the Parent Server confirms upload.
+- **Permissions Flow**: Foreground + Background Location (*Allow all the time*), Microphone, Phone State, Call Log, Notifications, Battery Optimization exemption, and Android `MediaProjection` screen capture consent.
 
 ## How to Build the Installable `.apk`
 

@@ -22,6 +22,29 @@ const {
 
 const AVATAR_COLORS = ['#2563eb', '#0891b2', '#059669', '#d97706', '#dc2626', '#7c3aed'];
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
+
+const ALLOWED_AUDIO_MIME_EXT = {
+  'audio/mp4': '.m4a',
+  'audio/m4a': '.m4a',
+  'audio/x-m4a': '.m4a',
+  'audio/aac': '.aac',
+  'audio/3gpp': '.3gp',
+  'audio/3gpp2': '.3g2',
+  'audio/mpeg': '.mp3',
+  'audio/ogg': '.ogg',
+  'audio/webm': '.webm',
+  'audio/wav': '.wav',
+  'audio/x-wav': '.wav',
+};
+
+const ALLOWED_VIDEO_MIME_EXT = {
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/3gpp': '.3gp',
+  'video/quicktime': '.mov',
+};
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -51,7 +74,8 @@ function extractBearerToken(req, queryToken = null) {
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Device-Token',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, X-Device-Token, X-Call-Direction, X-Call-Number, X-Call-Started-At, X-Call-Ended-At, X-Call-Duration-Sec, X-Call-Audio-Source, X-Screen-Started-At, X-Screen-Ended-At, X-Screen-Duration-Sec, X-Screen-Width, X-Screen-Height, X-Screen-Fps',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
@@ -66,14 +90,14 @@ function sendJson(res, statusCode, data) {
   res.end(body);
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
 
     req.on('data', (chunk) => {
       total += chunk.length;
-      if (total > MAX_BODY_BYTES) {
+      if (total > maxBytes) {
         reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
         req.destroy();
         return;
@@ -96,6 +120,171 @@ function readJsonBody(req) {
 
     req.on('error', (err) => reject(err));
   });
+}
+
+function readBinaryBody(req, maxBytes = MAX_AUDIO_BYTES) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+
+    req.on('data', (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(Object.assign(new Error('Audio upload exceeds maximum allowed size'), { statusCode: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      resolve(Buffer.concat(chunks));
+    });
+
+    req.on('error', (err) => reject(err));
+  });
+}
+
+function safeDecodeHeader(val) {
+  if (typeof val !== 'string') return '';
+  try {
+    return decodeURIComponent(val);
+  } catch {
+    return val;
+  }
+}
+
+function parseTimeWindow(raw, nowIso) {
+  let endedAt = nowIso;
+  if (raw.endedAt) {
+    const d = new Date(raw.endedAt);
+    if (Number.isNaN(d.getTime())) {
+      return { error: 'Invalid endedAt timestamp' };
+    }
+    endedAt = d.toISOString();
+  }
+
+  let durationSec = Number(raw.durationSec);
+  if (!Number.isFinite(durationSec) || durationSec < 0) {
+    durationSec = 0;
+  } else {
+    durationSec = Math.round(durationSec);
+  }
+
+  let startedAt;
+  if (raw.startedAt) {
+    const d = new Date(raw.startedAt);
+    if (Number.isNaN(d.getTime())) {
+      return { error: 'Invalid startedAt timestamp' };
+    }
+    startedAt = d.toISOString();
+    if (!raw.durationSec && Date.parse(endedAt) >= Date.parse(startedAt)) {
+      durationSec = Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000);
+    }
+  } else {
+    startedAt = new Date(Date.parse(endedAt) - durationSec * 1000).toISOString();
+  }
+
+  return { startedAt, endedAt, durationSec };
+}
+
+function normalizeCallMetadata(raw, nowIso) {
+  const direction = typeof raw.direction === 'string' ? raw.direction.trim().toLowerCase() : '';
+  if (direction !== 'incoming' && direction !== 'outgoing') {
+    return { error: 'direction must be "incoming" or "outgoing"' };
+  }
+
+  const rawNumber = typeof raw.phoneNumber === 'string' ? raw.phoneNumber.trim() : '';
+  const phoneNumber = rawNumber ? rawNumber.slice(0, 40) : 'Unknown';
+
+  const rawMime = typeof raw.mimeType === 'string' ? raw.mimeType.split(';')[0].trim().toLowerCase() : '';
+  const mimeType = ALLOWED_AUDIO_MIME_EXT[rawMime] ? rawMime : 'audio/mp4';
+  const ext = ALLOWED_AUDIO_MIME_EXT[mimeType] || '.m4a';
+
+  const windowResult = parseTimeWindow(raw, nowIso);
+  if (windowResult.error) return windowResult;
+
+  const audioSource =
+    typeof raw.audioSource === 'string' && raw.audioSource.trim()
+      ? raw.audioSource.trim().slice(0, 40)
+      : 'microphone';
+
+  return {
+    value: {
+      direction,
+      phoneNumber,
+      startedAt: windowResult.startedAt,
+      endedAt: windowResult.endedAt,
+      durationSec: windowResult.durationSec,
+      mimeType,
+      ext,
+      audioSource,
+    },
+  };
+}
+
+function normalizePositiveInt(val, fallback = 0, max = 10000) {
+  const n = Number(val);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.min(Math.round(n), max);
+}
+
+function normalizeScreenMetadata(raw, nowIso) {
+  const rawMime = typeof raw.mimeType === 'string' ? raw.mimeType.split(';')[0].trim().toLowerCase() : '';
+  const mimeType = ALLOWED_VIDEO_MIME_EXT[rawMime] ? rawMime : 'video/mp4';
+  const ext = ALLOWED_VIDEO_MIME_EXT[mimeType] || '.mp4';
+
+  const windowResult = parseTimeWindow(raw, nowIso);
+  if (windowResult.error) return windowResult;
+
+  return {
+    value: {
+      startedAt: windowResult.startedAt,
+      endedAt: windowResult.endedAt,
+      durationSec: windowResult.durationSec,
+      width: normalizePositiveInt(raw.width, 0, 8192),
+      height: normalizePositiveInt(raw.height, 0, 8192),
+      fps: normalizePositiveInt(raw.fps, 0, 120),
+      mimeType,
+      ext,
+    },
+  };
+}
+
+function serializeCallRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    childId: row.child_id,
+    direction: row.direction,
+    phoneNumber: row.phone_number || 'Unknown',
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    durationSec: row.duration_sec,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    audioSource: row.audio_source || 'microphone',
+    createdAt: row.created_at,
+    audioUrl: `/api/calls/${encodeURIComponent(row.id)}/audio`,
+  };
+}
+
+function serializeScreenRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    childId: row.child_id,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    durationSec: row.duration_sec,
+    width: row.width || 0,
+    height: row.height || 0,
+    fps: row.fps || 0,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    createdAt: row.created_at,
+    videoUrl: `/api/screen-recordings/${encodeURIComponent(row.id)}/video`,
+  };
 }
 
 function serializeLocationRow(row) {
@@ -152,6 +341,136 @@ function createApp(options = {}) {
     options.publicDir === null
       ? null
       : path.resolve(options.publicDir || path.join(__dirname, '..', 'parent-app', 'public'));
+  const recordingsDir =
+    options.recordingsDir !== undefined
+      ? options.recordingsDir
+      : dbPath === ':memory:'
+        ? null
+        : path.join(path.dirname(dbPath), 'recordings');
+  const memoryRecordings = new Map();
+
+  if (recordingsDir) {
+    fs.mkdirSync(recordingsDir, { recursive: true });
+  }
+
+  function storeMediaFile(fileName, buffer) {
+    if (!recordingsDir) {
+      memoryRecordings.set(fileName, buffer);
+      return;
+    }
+    const baseDir = path.resolve(recordingsDir);
+    const targetPath = path.resolve(baseDir, fileName);
+    if (!targetPath.startsWith(baseDir + path.sep)) {
+      throw new Error('Invalid recording path');
+    }
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, buffer);
+  }
+
+  function deleteMediaFile(fileName) {
+    if (!fileName) return;
+    if (!recordingsDir) {
+      memoryRecordings.delete(fileName);
+      return;
+    }
+    const baseDir = path.resolve(recordingsDir);
+    const targetPath = path.resolve(baseDir, fileName);
+    if (targetPath.startsWith(baseDir + path.sep)) {
+      try {
+        fs.unlinkSync(targetPath);
+      } catch {
+        // Ignore missing file
+      }
+    }
+  }
+
+  function serveMediaFile(req, res, row, downloadName, defaultMime, defaultExt) {
+    const ext = path.extname(row.file_name) || defaultExt;
+    const contentType = row.mime_type || defaultMime;
+    const rangeHeader = req.headers.range;
+
+    if (!recordingsDir) {
+      const buf = memoryRecordings.get(row.file_name);
+      if (!buf) {
+        return sendJson(res, 404, { error: 'Recording not found' });
+      }
+      const total = buf.length;
+      if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+        const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+        const start = startStr ? parseInt(startStr, 10) : 0;
+        const end = endStr ? Math.min(parseInt(endStr, 10), total - 1) : total - 1;
+        if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start > end || end >= total) {
+          res.writeHead(416, { ...CORS_HEADERS, 'Content-Range': `bytes */${total}` });
+          res.end();
+          return;
+        }
+        const slice = buf.subarray(start, end + 1);
+        res.writeHead(206, {
+          ...CORS_HEADERS,
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Content-Length': slice.length,
+          'Cache-Control': 'no-store',
+        });
+        res.end(slice);
+        return;
+      }
+      res.writeHead(200, {
+        ...CORS_HEADERS,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': total,
+        'Content-Disposition': `inline; filename="${downloadName}${ext}"`,
+        'Cache-Control': 'no-store',
+      });
+      res.end(buf);
+      return;
+    }
+
+    const baseDir = path.resolve(recordingsDir);
+    const targetPath = path.resolve(baseDir, row.file_name);
+    if (!targetPath.startsWith(baseDir + path.sep)) {
+      return sendJson(res, 403, { error: 'Forbidden' });
+    }
+
+    fs.stat(targetPath, (err, stat) => {
+      if (err || !stat.isFile()) {
+        return sendJson(res, 404, { error: 'Recording file not found' });
+      }
+      const total = stat.size;
+      if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+        const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+        const start = startStr ? parseInt(startStr, 10) : 0;
+        const end = endStr ? Math.min(parseInt(endStr, 10), total - 1) : total - 1;
+        if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start > end || end >= total) {
+          res.writeHead(416, { ...CORS_HEADERS, 'Content-Range': `bytes */${total}` });
+          res.end();
+          return;
+        }
+        res.writeHead(206, {
+          ...CORS_HEADERS,
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Content-Length': end - start + 1,
+          'Cache-Control': 'no-store',
+        });
+        fs.createReadStream(targetPath, { start, end }).pipe(res);
+        return;
+      }
+
+      res.writeHead(200, {
+        ...CORS_HEADERS,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': total,
+        'Content-Disposition': `inline; filename="${downloadName}${ext}"`,
+        'Cache-Control': 'no-store',
+      });
+      fs.createReadStream(targetPath).pipe(res);
+    });
+  }
 
   const { db, statements, close: closeDb } = createDatabase(dbPath);
 
@@ -542,10 +861,121 @@ function createApp(options = {}) {
         const parent = authenticateParent(req, res);
         if (!parent) return;
         const childId = decodeURIComponent(childDeleteMatch[1]);
+        const callFiles = statements.listCallFilesForChild.all(childId);
+        const screenFiles = statements.listScreenRecordingFilesForChild.all(childId);
         const result = statements.deleteChild.run(childId, parent.id);
         if (result.changes === 0) {
           return sendJson(res, 404, { error: 'Child profile not found' });
         }
+        for (const f of callFiles) {
+          deleteMediaFile(f.file_name);
+        }
+        for (const f of screenFiles) {
+          deleteMediaFile(f.file_name);
+        }
+        return sendJson(res, 200, { deleted: true });
+      }
+
+      // Parent call-recording endpoints
+      const callsListMatch = pathname.match(/^\/api\/children\/([^/]+)\/calls$/);
+      if (method === 'GET' && callsListMatch) {
+        const parent = authenticateParent(req, res);
+        if (!parent) return;
+        const childId = decodeURIComponent(callsListMatch[1]);
+        const child = statements.findChildByIdAndParent.get(childId, parent.id);
+        if (!child) {
+          return sendJson(res, 404, { error: 'Child profile not found' });
+        }
+
+        const directionParam = (url.searchParams.get('direction') || 'all').toLowerCase();
+        const rawLimit = Number(url.searchParams.get('limit') || 100);
+        const limit = Number.isFinite(rawLimit)
+          ? Math.min(Math.max(1, Math.floor(rawLimit)), 500)
+          : 100;
+
+        const rows =
+          directionParam === 'incoming' || directionParam === 'outgoing'
+            ? statements.listCallsByChildAndDirection.all(child.id, directionParam, limit)
+            : statements.listCallsByChild.all(child.id, limit);
+
+        return sendJson(res, 200, {
+          childId: child.id,
+          calls: rows.map(serializeCallRow),
+        });
+      }
+
+      const callAudioMatch = pathname.match(/^\/api\/calls\/([^/]+)\/audio$/);
+      if (method === 'GET' && callAudioMatch) {
+        const parent = authenticateParent(req, res, url.searchParams.get('token'));
+        if (!parent) return;
+        const callId = decodeURIComponent(callAudioMatch[1]);
+        const row = statements.findCallByIdAndParent.get(callId, parent.id);
+        if (!row) {
+          return sendJson(res, 404, { error: 'Call recording not found' });
+        }
+        return serveMediaFile(req, res, row, `call-${row.direction}-${row.id}`, 'audio/mp4', '.m4a');
+      }
+
+      const callDeleteMatch = pathname.match(/^\/api\/calls\/([^/]+)$/);
+      if (method === 'DELETE' && callDeleteMatch) {
+        const parent = authenticateParent(req, res);
+        if (!parent) return;
+        const callId = decodeURIComponent(callDeleteMatch[1]);
+        const existing = statements.findCallByIdAndParent.get(callId, parent.id);
+        if (!existing) {
+          return sendJson(res, 404, { error: 'Call recording not found' });
+        }
+        statements.deleteCallByIdAndParent.run(callId, parent.id);
+        deleteMediaFile(existing.file_name);
+        return sendJson(res, 200, { deleted: true });
+      }
+
+      // Parent screen-recording endpoints
+      const screenListMatch = pathname.match(/^\/api\/children\/([^/]+)\/screen-recordings$/);
+      if (method === 'GET' && screenListMatch) {
+        const parent = authenticateParent(req, res);
+        if (!parent) return;
+        const childId = decodeURIComponent(screenListMatch[1]);
+        const child = statements.findChildByIdAndParent.get(childId, parent.id);
+        if (!child) {
+          return sendJson(res, 404, { error: 'Child profile not found' });
+        }
+
+        const rawLimit = Number(url.searchParams.get('limit') || 100);
+        const limit = Number.isFinite(rawLimit)
+          ? Math.min(Math.max(1, Math.floor(rawLimit)), 500)
+          : 100;
+
+        const rows = statements.listScreenRecordingsByChild.all(child.id, limit);
+        return sendJson(res, 200, {
+          childId: child.id,
+          recordings: rows.map(serializeScreenRow),
+        });
+      }
+
+      const screenVideoMatch = pathname.match(/^\/api\/screen-recordings\/([^/]+)\/video$/);
+      if (method === 'GET' && screenVideoMatch) {
+        const parent = authenticateParent(req, res, url.searchParams.get('token'));
+        if (!parent) return;
+        const recordingId = decodeURIComponent(screenVideoMatch[1]);
+        const row = statements.findScreenRecordingByIdAndParent.get(recordingId, parent.id);
+        if (!row) {
+          return sendJson(res, 404, { error: 'Screen recording not found' });
+        }
+        return serveMediaFile(req, res, row, `screen-${row.id}`, 'video/mp4', '.mp4');
+      }
+
+      const screenDeleteMatch = pathname.match(/^\/api\/screen-recordings\/([^/]+)$/);
+      if (method === 'DELETE' && screenDeleteMatch) {
+        const parent = authenticateParent(req, res);
+        if (!parent) return;
+        const recordingId = decodeURIComponent(screenDeleteMatch[1]);
+        const existing = statements.findScreenRecordingByIdAndParent.get(recordingId, parent.id);
+        if (!existing) {
+          return sendJson(res, 404, { error: 'Screen recording not found' });
+        }
+        statements.deleteScreenRecordingByIdAndParent.run(recordingId, parent.id);
+        deleteMediaFile(existing.file_name);
         return sendJson(res, 200, { deleted: true });
       }
 
@@ -647,6 +1077,174 @@ function createApp(options = {}) {
           return sendJson(res, 400, { error: result.error });
         }
         return sendJson(res, 201, result);
+      }
+
+      if (method === 'POST' && pathname === '/api/calls') {
+        const child = authenticateDevice(req, res);
+        if (!child) return;
+
+        const nowIso = new Date().toISOString();
+        const contentType = String(req.headers['content-type'] || '').toLowerCase();
+        let metaInput;
+        let audioBuffer;
+
+        if (contentType.includes('application/json')) {
+          const body = await readJsonBody(req);
+          if (typeof body.audioBase64 !== 'string' || !body.audioBase64.trim()) {
+            return sendJson(res, 400, { error: 'audioBase64 is required' });
+          }
+          audioBuffer = Buffer.from(body.audioBase64, 'base64');
+          if (audioBuffer.length > MAX_AUDIO_BYTES) {
+            return sendJson(res, 413, { error: 'Audio upload exceeds maximum allowed size' });
+          }
+          metaInput = {
+            direction: body.direction,
+            phoneNumber: body.phoneNumber,
+            startedAt: body.startedAt,
+            endedAt: body.endedAt,
+            durationSec: body.durationSec,
+            mimeType: body.mimeType,
+            audioSource: body.audioSource,
+          };
+        } else {
+          audioBuffer = await readBinaryBody(req, MAX_AUDIO_BYTES);
+          metaInput = {
+            direction: req.headers['x-call-direction'],
+            phoneNumber: safeDecodeHeader(req.headers['x-call-number']),
+            startedAt: req.headers['x-call-started-at'],
+            endedAt: req.headers['x-call-ended-at'],
+            durationSec: req.headers['x-call-duration-sec'],
+            mimeType: contentType,
+            audioSource: req.headers['x-call-audio-source'],
+          };
+        }
+
+        if (!audioBuffer || audioBuffer.length === 0) {
+          return sendJson(res, 400, { error: 'Empty audio recording payload' });
+        }
+
+        const normalized = normalizeCallMetadata(metaInput, nowIso);
+        if (normalized.error) {
+          return sendJson(res, 400, { error: normalized.error });
+        }
+
+        const meta = normalized.value;
+        const callId = crypto.randomUUID();
+        const fileName = `${child.id}/${callId}${meta.ext}`;
+
+        storeMediaFile(fileName, audioBuffer);
+
+        statements.insertCallRecording.run(
+          callId,
+          child.id,
+          meta.direction,
+          meta.phoneNumber,
+          meta.startedAt,
+          meta.endedAt,
+          meta.durationSec,
+          meta.mimeType,
+          fileName,
+          audioBuffer.length,
+          meta.audioSource,
+          nowIso
+        );
+
+        statements.updateChildTelemetry.run(nowIso, null, null, 1, child.id);
+
+        const row = statements.findCallByIdAndParent.get(callId, child.parent_id);
+        const serialized = serializeCallRow(row);
+
+        broadcastToParent(child.parent_id, 'call_recorded', {
+          type: 'call_recorded',
+          childId: child.id,
+          call: serialized,
+        });
+
+        return sendJson(res, 201, { call: serialized });
+      }
+
+      if (method === 'POST' && pathname === '/api/screen-recordings') {
+        const child = authenticateDevice(req, res);
+        if (!child) return;
+
+        const nowIso = new Date().toISOString();
+        const contentType = String(req.headers['content-type'] || '').toLowerCase();
+        let metaInput;
+        let videoBuffer;
+
+        if (contentType.includes('application/json')) {
+          const body = await readJsonBody(req, MAX_VIDEO_BYTES);
+          if (typeof body.videoBase64 !== 'string' || !body.videoBase64.trim()) {
+            return sendJson(res, 400, { error: 'videoBase64 is required' });
+          }
+          videoBuffer = Buffer.from(body.videoBase64, 'base64');
+          if (videoBuffer.length > MAX_VIDEO_BYTES) {
+            return sendJson(res, 413, { error: 'Video upload exceeds maximum allowed size' });
+          }
+          metaInput = {
+            startedAt: body.startedAt,
+            endedAt: body.endedAt,
+            durationSec: body.durationSec,
+            width: body.width,
+            height: body.height,
+            fps: body.fps,
+            mimeType: body.mimeType,
+          };
+        } else {
+          videoBuffer = await readBinaryBody(req, MAX_VIDEO_BYTES);
+          metaInput = {
+            startedAt: req.headers['x-screen-started-at'],
+            endedAt: req.headers['x-screen-ended-at'],
+            durationSec: req.headers['x-screen-duration-sec'],
+            width: req.headers['x-screen-width'],
+            height: req.headers['x-screen-height'],
+            fps: req.headers['x-screen-fps'],
+            mimeType: contentType,
+          };
+        }
+
+        if (!videoBuffer || videoBuffer.length === 0) {
+          return sendJson(res, 400, { error: 'Empty screen recording payload' });
+        }
+
+        const normalized = normalizeScreenMetadata(metaInput, nowIso);
+        if (normalized.error) {
+          return sendJson(res, 400, { error: normalized.error });
+        }
+
+        const meta = normalized.value;
+        const recordingId = crypto.randomUUID();
+        const fileName = `${child.id}/screen-${recordingId}${meta.ext}`;
+
+        storeMediaFile(fileName, videoBuffer);
+
+        statements.insertScreenRecording.run(
+          recordingId,
+          child.id,
+          meta.startedAt,
+          meta.endedAt,
+          meta.durationSec,
+          meta.width,
+          meta.height,
+          meta.fps,
+          meta.mimeType,
+          fileName,
+          videoBuffer.length,
+          nowIso
+        );
+
+        statements.updateChildTelemetry.run(nowIso, null, null, 1, child.id);
+
+        const row = statements.findScreenRecordingByIdAndParent.get(recordingId, child.parent_id);
+        const serialized = serializeScreenRow(row);
+
+        broadcastToParent(child.parent_id, 'screen_recorded', {
+          type: 'screen_recorded',
+          childId: child.id,
+          recording: serialized,
+        });
+
+        return sendJson(res, 201, { recording: serialized });
       }
 
       // Frontend routes (Parent Console only when publicDir is configured)

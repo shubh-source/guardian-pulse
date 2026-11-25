@@ -1,11 +1,13 @@
 package com.guardianpulse.child
 
 import android.Manifest
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,6 +20,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.Executors
 
@@ -25,6 +28,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: PrefsStore
     private lateinit var queue: OfflineQueueHelper
+    private lateinit var callUploadStore: PendingUploadStore
+    private lateinit var screenUploadStore: PendingScreenUploadStore
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
     private lateinit var pairCard: LinearLayout
@@ -39,25 +44,44 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sharedWithLabel: TextView
     private lateinit var telemetryCoords: TextView
     private lateinit var telemetrySync: TextView
+    private lateinit var lastCallText: TextView
+    private lateinit var callUploadStatusText: TextView
+    private lateinit var lastScreenText: TextView
+    private lateinit var screenUploadStatusText: TextView
+    private lateinit var callRecordingSwitch: SwitchCompat
+    private lateinit var speakerBoostSwitch: SwitchCompat
+    private lateinit var screenRecordingSwitch: SwitchCompat
     private lateinit var toggleButton: Button
     private lateinit var permissionsButton: Button
     private lateinit var unpairButton: Button
+    private var suppressScreenSwitchListener = false
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         requestBackgroundLocationIfNeeded()
-        if (prefs.isPaired && prefs.trackingActive && hasForegroundLocation()) {
-            LocationTrackingService.start(this)
-        }
+        startActiveServicesIfPermitted()
+        renderUi()
     }
 
     private val backgroundPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
-        if (prefs.isPaired && prefs.trackingActive && hasForegroundLocation()) {
-            LocationTrackingService.start(this)
+        startActiveServicesIfPermitted()
+    }
+
+    private val screenCaptureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            prefs.screenRecordingEnabled = true
+            ScreenRecorderService.start(this, result.resultCode, data)
+        } else {
+            prefs.screenRecordingEnabled = false
+            prefs.lastScreenSummary = "Screen capture permission declined"
         }
+        renderUi()
     }
 
     private val telemetryReceiver = object : BroadcastReceiver() {
@@ -72,6 +96,8 @@ class MainActivity : AppCompatActivity() {
 
         prefs = PrefsStore(this)
         queue = OfflineQueueHelper(this)
+        callUploadStore = PendingUploadStore(this)
+        screenUploadStore = PendingScreenUploadStore(this)
 
         pairCard = findViewById(R.id.pairCard)
         trackerCard = findViewById(R.id.trackerCard)
@@ -85,12 +111,55 @@ class MainActivity : AppCompatActivity() {
         sharedWithLabel = findViewById(R.id.sharedWithLabel)
         telemetryCoords = findViewById(R.id.telemetryCoords)
         telemetrySync = findViewById(R.id.telemetrySync)
+        lastCallText = findViewById(R.id.lastCallText)
+        callUploadStatusText = findViewById(R.id.callUploadStatusText)
+        lastScreenText = findViewById(R.id.lastScreenText)
+        screenUploadStatusText = findViewById(R.id.screenUploadStatusText)
+        callRecordingSwitch = findViewById(R.id.callRecordingSwitch)
+        speakerBoostSwitch = findViewById(R.id.speakerBoostSwitch)
+        screenRecordingSwitch = findViewById(R.id.screenRecordingSwitch)
         toggleButton = findViewById(R.id.toggleButton)
         permissionsButton = findViewById(R.id.permissionsButton)
         unpairButton = findViewById(R.id.unpairButton)
 
         serverUrlInput.setText(prefs.serverUrl)
         deviceNameInput.setText(Build.MODEL ?: "Android Phone")
+        callRecordingSwitch.isChecked = prefs.callRecordingEnabled
+        speakerBoostSwitch.isChecked = prefs.speakerBoostEnabled
+        syncScreenSwitchChecked(ScreenRecorderService.isRunning)
+
+        callRecordingSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.callRecordingEnabled = isChecked
+            if (prefs.isPaired && prefs.trackingActive && isChecked) {
+                if (hasCallMicPermissions()) {
+                    CallRecorderService.start(this)
+                } else {
+                    requestRequiredPermissions()
+                }
+            } else {
+                CallRecorderService.stop(this)
+            }
+            renderUi()
+        }
+
+        speakerBoostSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.speakerBoostEnabled = isChecked
+        }
+
+        screenRecordingSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressScreenSwitchListener) return@setOnCheckedChangeListener
+            if (isChecked) {
+                if (!prefs.isPaired || !prefs.trackingActive) {
+                    syncScreenSwitchChecked(false)
+                    return@setOnCheckedChangeListener
+                }
+                requestScreenCaptureConsent()
+            } else {
+                prefs.screenRecordingEnabled = false
+                ScreenRecorderService.stop(this)
+                renderUi()
+            }
+        }
 
         pairButton.setOnClickListener { handlePair() }
         toggleButton.setOnClickListener { toggleTracking() }
@@ -103,7 +172,10 @@ class MainActivity : AppCompatActivity() {
         renderUi()
         if (prefs.isPaired && prefs.trackingActive) {
             requestRequiredPermissions()
-            LocationTrackingService.start(this)
+            startActiveServicesIfPermitted()
+            if (prefs.screenRecordingEnabled && !ScreenRecorderService.isRunning) {
+                requestScreenCaptureConsent()
+            }
         }
     }
 
@@ -163,9 +235,7 @@ class MainActivity : AppCompatActivity() {
                     pairButton.isEnabled = true
                     renderUi()
                     requestRequiredPermissions()
-                    if (hasForegroundLocation()) {
-                        LocationTrackingService.start(this)
-                    }
+                    startActiveServicesIfPermitted()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -181,9 +251,11 @@ class MainActivity : AppCompatActivity() {
         prefs.trackingActive = next
         if (next) {
             requestRequiredPermissions()
-            LocationTrackingService.start(this)
+            startActiveServicesIfPermitted()
         } else {
             LocationTrackingService.stop(this)
+            CallRecorderService.stop(this)
+            ScreenRecorderService.stop(this)
         }
         ioExecutor.execute {
             try {
@@ -198,8 +270,12 @@ class MainActivity : AppCompatActivity() {
         val token = prefs.deviceToken
         val url = prefs.serverUrl
         LocationTrackingService.stop(this)
+        CallRecorderService.stop(this)
+        ScreenRecorderService.stop(this)
         prefs.clearPairing()
         queue.clearAll()
+        callUploadStore.clearAll()
+        screenUploadStore.clearAll()
         ioExecutor.execute {
             try {
                 if (token.isNotBlank()) {
@@ -209,6 +285,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
         renderUi()
+    }
+
+    private fun startActiveServicesIfPermitted() {
+        if (!prefs.isPaired || !prefs.trackingActive) return
+        if (hasForegroundLocation()) {
+            LocationTrackingService.start(this)
+        }
+        if (prefs.callRecordingEnabled && hasCallMicPermissions()) {
+            CallRecorderService.start(this)
+        }
     }
 
     private fun showPairError(msg: String) {
@@ -227,19 +313,40 @@ class MainActivity : AppCompatActivity() {
         trackerCard.visibility = View.VISIBLE
 
         if (prefs.trackingActive) {
-            statusTitle.text = "24/7 Location Sharing Active"
+            val activeModules = mutableListOf("Location")
+            if (prefs.callRecordingEnabled) activeModules.add("Calls")
+            if (ScreenRecorderService.isRunning) activeModules.add("Screen")
+            statusTitle.text = "24/7 Protection Active (${activeModules.joinToString(" + ")})"
             statusTitle.setTextColor(0xFF10B981.toInt())
-            toggleButton.text = "Pause Sharing"
+            toggleButton.text = "Pause Protection"
         } else {
-            statusTitle.text = "Location Sharing Paused"
+            statusTitle.text = "Protection Paused"
             statusTitle.setTextColor(0xFFF59E0B.toInt())
-            toggleButton.text = "Resume Sharing"
+            toggleButton.text = "Resume Protection"
         }
 
         sharedWithLabel.text =
             "Child: ${prefs.childName} · Parent: ${prefs.parentName} (${prefs.deviceName})"
         telemetryCoords.text = "Last fix: ${prefs.lastSummary}"
-        telemetrySync.text = "Last synced: ${prefs.lastSyncedAt} · Offline queue: ${queue.count()}"
+        telemetrySync.text = "Last GPS sync: ${prefs.lastSyncedAt} · GPS queue: ${queue.count()}"
+        lastCallText.text = "Last call: ${prefs.lastCallSummary}"
+        callUploadStatusText.text =
+            "Last call sent: ${prefs.lastCallUploadedAt} · Call upload queue: ${callUploadStore.count()}"
+        lastScreenText.text = "Last screen clip: ${prefs.lastScreenSummary}"
+        screenUploadStatusText.text =
+            "Last screen sent: ${prefs.lastScreenUploadedAt} · Screen upload queue: ${screenUploadStore.count()}"
+        syncScreenSwitchChecked(ScreenRecorderService.isRunning)
+    }
+
+    private fun syncScreenSwitchChecked(checked: Boolean) {
+        suppressScreenSwitchListener = true
+        screenRecordingSwitch.isChecked = checked
+        suppressScreenSwitchListener = false
+    }
+
+    private fun requestScreenCaptureConsent() {
+        val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
     }
 
     private fun hasForegroundLocation(): Boolean {
@@ -248,17 +355,33 @@ class MainActivity : AppCompatActivity() {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun hasCallMicPermissions(): Boolean {
+        val mic = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        val phone = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.READ_PHONE_STATE
+        ) == PackageManager.PERMISSION_GRANTED
+        return mic && phone
+    }
+
     private fun requestRequiredPermissions() {
-        val needed = mutableListOf<String>()
-        if (!hasForegroundLocation()) {
-            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val candidates = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG
+        )
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
+            candidates.add(Manifest.permission.PROCESS_OUTGOING_CALLS)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            needed.add(Manifest.permission.POST_NOTIFICATIONS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            candidates.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        val needed = candidates.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (needed.isNotEmpty()) {
             permissionLauncher.launch(needed.toTypedArray())
