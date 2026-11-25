@@ -68,7 +68,7 @@
                 android:layout_marginTop="4dp"
                 android:layout_marginBottom="12dp"
                 android:background="#0B1120"
-                android:hint="http://192.168.1.10:3001"
+                android:hint="https://guardian-pulse.onrender.com"
                 android:inputType="textUri"
                 android:padding="12dp"
                 android:textColor="#F8FAFC"

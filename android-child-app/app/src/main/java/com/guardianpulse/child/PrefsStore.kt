@@ -8,7 +8,8 @@ class PrefsStore(context: Context) {
         context.getSharedPreferences("guardian_pulse_child", Context.MODE_PRIVATE)
 
     var serverUrl: String
-        get() = prefs.getString("server_url", "http://192.168.1.10:3001") ?: "http://192.168.1.10:3001"
+        get() = prefs.getString("server_url", "https://guardian-pulse.onrender.com")
+            ?: "https://guardian-pulse.onrender.com"
         set(value) = prefs.edit().putString("server_url", value.trimEnd('/')).apply()
 
     var deviceToken: String

@@ -6,3 +6,6 @@ Thumbs.db
 android-child-app/.gradle/
 android-child-app/app/build/
 android-child-app/local.properties
+android-parent-app/.gradle/
+android-parent-app/app/build/
+android-parent-app/local.properties
