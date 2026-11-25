@@ -1,0 +1,6 @@
+data/
+.git/
+node_modules/
+android-child-app/.gradle/
+android-child-app/app/build/
+*.log

@@ -1,0 +1,11 @@
+{
+  "name": "guardian-pulse-parent",
+  "version": "1.0.0",
+  "description": "GuardianPulse Parent Application — Live 24/7 Map, Family Profiles, History Timeline & API Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "license": "MIT"
+}

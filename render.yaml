@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: guardianpulse-parent
+    runtime: docker
+    dockerfilePath: ./Dockerfile.parent
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: guardianpulse-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/guardian.db
+      - key: CHILD_APP_URL
+        fromService:
+          type: web
+          name: guardianpulse-child
+          property: url
+
+  - type: web
+    name: guardianpulse-child
+    runtime: docker
+    dockerfilePath: ./Dockerfile.child
+    plan: starter
+    envVars:
+      - key: PARENT_API_URL
+        fromService:
+          type: web
+          name: guardianpulse-parent
+          property: url

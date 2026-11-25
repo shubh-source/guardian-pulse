@@ -1,0 +1,18 @@
+FROM node:24-alpine
+
+WORKDIR /app
+
+COPY package.json ./
+COPY server ./server
+COPY parent-app ./parent-app
+
+RUN mkdir -p /var/data
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=10000
+ENV DB_PATH=/var/data/guardian.db
+
+EXPOSE 10000
+
+CMD ["node", "parent-app/server.js"]

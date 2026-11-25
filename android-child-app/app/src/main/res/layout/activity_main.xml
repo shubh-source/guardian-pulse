@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B1120"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GuardianPulse Child"
+            android:textColor="#F8FAFC"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="18dp"
+            android:text="Native 24/7 Background Safety Tracker"
+            android:textColor="#94A3B8"
+            android:textSize="14sp" />
+
+        <!-- Pairing Section -->
+        <LinearLayout
+            android:id="@+id/pairCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#111827"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pair With Parent App"
+                android:textColor="#F8FAFC"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="14dp"
+                android:text="Enter the Parent Server URL and the 6-character code from your Parent Dashboard."
+                android:textColor="#94A3B8"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Parent Server URL"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/serverUrlInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:background="#0B1120"
+                android:hint="http://192.168.1.10:3001"
+                android:inputType="textUri"
+                android:padding="12dp"
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="6-Character Pairing Code"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/pairingCodeInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:background="#0B1120"
+                android:hint="A7K9P2"
+                android:inputType="textCapCharacters"
+                android:maxLength="8"
+                android:padding="12dp"
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Device Name"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/deviceNameInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="14dp"
+                android:background="#0B1120"
+                android:hint="Leo's Phone"
+                android:inputType="text"
+                android:padding="12dp"
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B" />
+
+            <TextView
+                android:id="@+id/pairErrorText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textColor="#FCA5A5"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/pairButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="#2563EB"
+                android:text="Connect &amp; Start 24/7 Tracking"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+
+        <!-- Active Tracker Section -->
+        <LinearLayout
+            android:id="@+id/trackerCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#111827"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/statusTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="24/7 Location Sharing Active"
+                android:textColor="#10B981"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/sharedWithLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="14dp"
+                android:text="Sharing with Parent"
+                android:textColor="#94A3B8"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/telemetryCoords"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Last fix: --"
+                android:textColor="#F8FAFC"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/telemetrySync"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Last synced: -- · Offline queue: 0"
+                android:textColor="#94A3B8"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/toggleButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:backgroundTint="#1E293B"
+                android:text="Pause Sharing"
+                android:textColor="#F8FAFC" />
+
+            <Button
+                android:id="@+id/permissionsButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#1E293B"
+                android:text="Allow Background Location &amp; Disable Battery Sleep"
+                android:textColor="#60A5FA" />
+
+            <Button
+                android:id="@+id/unpairButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="#7F1D1D"
+                android:text="Disconnect Device"
+                android:textColor="#FCA5A5" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

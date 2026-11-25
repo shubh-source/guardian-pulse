@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1120" />
+    <title>GuardianPulse — Child Safety Tracker</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-badge">GP</div>
+        <span>GuardianPulse · Child App</span>
+      </div>
+      <div class="topbar-actions">
+        <span id="headerStatePill" class="pill">
+          <span id="headerDot" class="dot"></span>
+          <span id="headerStateText">Not Paired</span>
+        </span>
+      </div>
+    </header>
+
+    <main class="child-shell">
+      <!-- Pairing Card -->
+      <section id="pairCard" class="card">
+        <h1 style="margin: 0 0 6px; font-size: 1.25rem">Pair With Parent App</h1>
+        <p style="margin: 0 0 16px; color: var(--text-muted); font-size: 0.88rem; line-height: 1.45">
+          Enter the 6-character pairing code shown in your parent's GuardianPulse Parent App to
+          start transparent family location sharing.
+        </p>
+
+        <div id="pairError" class="error-banner hidden"></div>
+
+        <form id="pairForm">
+          <div class="field">
+            <label for="pairingCodeInput">Pairing Code</label>
+            <input
+              id="pairingCodeInput"
+              type="text"
+              maxlength="8"
+              placeholder="e.g. A7K9P2"
+              style="text-transform: uppercase; letter-spacing: 0.18em; font-weight: 700"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="deviceNameInput">Device Label</label>
+            <input id="deviceNameInput" type="text" placeholder="e.g. Leo's Phone" />
+          </div>
+          <div class="field">
+            <label for="apiServerInput">Parent Server URL (optional)</label>
+            <input
+              id="apiServerInput"
+              type="url"
+              placeholder="Leave blank to use default Child App proxy"
+            />
+          </div>
+          <button class="btn btn-primary" style="width: 100%" type="submit">
+            Connect &amp; Start Sharing
+          </button>
+        </form>
+      </section>
+
+      <!-- Active Tracker Card -->
+      <section id="trackerCard" class="hidden" style="display: flex; flex-direction: column; gap: 14px">
+        <div id="statusBanner" class="status-banner">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 700">
+              <span id="trackerDot" class="dot live"></span>
+              <span id="trackerStateLabel">24/7 Location Sharing Active</span>
+            </div>
+            <span id="networkBadge" class="pill">Online</span>
+          </div>
+          <div
+            id="sharedWithText"
+            style="margin-top: 6px; font-size: 0.84rem; color: var(--text-muted)"
+          >
+            Sharing with parent...
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <span class="section-title">Live Telemetry</span>
+            <button id="toggleTrackingBtn" class="btn btn-secondary btn-sm" type="button">
+              Pause Sharing
+            </button>
+          </div>
+
+          <div class="telemetry-grid">
+            <div class="stat-box">
+              <div class="stat-label">Coordinates</div>
+              <div id="telCoords" class="stat-val" style="font-size: 0.84rem">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Last Synced</div>
+              <div id="telLastSync" class="stat-val" style="font-size: 0.84rem">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Accuracy / Speed</div>
+              <div id="telAccuracy" class="stat-val" style="font-size: 0.84rem">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Offline Queue</div>
+              <div id="telQueue" class="stat-val" style="font-size: 0.84rem">0 pts</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px">
+            <button id="sendNowBtn" class="btn btn-primary btn-sm" type="button">
+              Send GPS Ping Now
+            </button>
+            <button id="wakeLockBtn" class="btn btn-secondary btn-sm" type="button">
+              Keep Screen Awake: OFF
+            </button>
+            <button id="simulateBtn" class="btn btn-secondary btn-sm" type="button">
+              Simulate Walk (Test)
+            </button>
+          </div>
+
+          <div id="trackerError" class="error-banner hidden" style="margin-top: 12px"></div>
+        </div>
+
+        <div class="notice-box">
+          <strong>24/7 Browser Tracking Tip:</strong> Install this Child App to your phone's Home
+          Screen (PWA) and keep <em>Keep Screen Awake</em> enabled when actively tracking. Mobile
+          browsers pause background JavaScript when locked or minimized; true locked-screen 24/7
+          background GPS requires a native mobile foreground service. Offline points are cached
+          locally and synced automatically when connectivity returns.
+        </div>
+
+        <button id="unpairBtn" class="btn btn-danger btn-sm" type="button">
+          Disconnect This Device
+        </button>
+      </section>
+    </main>
+
+    <script type="module" src="/js/child.js"></script>
+  </body>
+</html>

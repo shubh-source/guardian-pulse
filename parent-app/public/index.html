@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1120" />
+    <title>GuardianPulse Parent — 24/7 Live Location Console</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-badge">GP</div>
+        <span>GuardianPulse · Parent App</span>
+      </div>
+      <div class="topbar-actions">
+        <span id="sseStatusPill" class="pill hidden">
+          <span id="sseDot" class="dot"></span>
+          <span id="sseLabel">Connecting...</span>
+        </span>
+        <button id="logoutBtn" class="btn btn-secondary btn-sm hidden" type="button">
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Parent Auth View -->
+    <main id="authView" class="auth-screen">
+      <section class="auth-card">
+        <h1>Parent Safety Console</h1>
+        <p>
+          Monitor your child's live 24/7 location and review movement history timelines from your
+          parent account.
+        </p>
+
+        <div class="tabs">
+          <button id="tabLogin" class="tab-btn active" type="button">Sign In</button>
+          <button id="tabRegister" class="tab-btn" type="button">Create Account</button>
+        </div>
+
+        <div id="authError" class="error-banner hidden"></div>
+
+        <form id="authForm">
+          <div id="nameField" class="field hidden">
+            <label for="authName">Parent / Guardian Name</label>
+            <input id="authName" type="text" placeholder="e.g. Sarah Patel" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="authEmail">Email Address</label>
+            <input
+              id="authEmail"
+              type="email"
+              placeholder="parent@example.com"
+              autocomplete="email"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="authPassword">Password</label>
+            <input
+              id="authPassword"
+              type="password"
+              placeholder="At least 6 characters"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+          <button id="authSubmitBtn" class="btn btn-primary" style="width: 100%" type="submit">
+            Sign In
+          </button>
+        </form>
+      </section>
+    </main>
+
+    <!-- Main Dashboard View -->
+    <main id="dashboardView" class="dashboard hidden">
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span class="section-title">Family Profiles</span>
+            <button id="addChildBtn" class="btn btn-primary btn-sm" type="button">
+              + Add Child
+            </button>
+          </div>
+          <div id="childList" class="child-list">
+            <div class="empty-state">No child profiles yet. Add one to generate a pairing code.</div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span class="section-title">Stay Spots (50m · 10m+)</span>
+            <span id="staySpotsCount" class="pill" style="padding: 2px 8px; font-size: 0.72rem">0</span>
+          </div>
+          <div id="staySpotsList" class="stay-spots-list">
+            <div class="empty-state" style="padding: 10px 6px">
+              No 10+ min stops within 50m in this time range.
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-panel">
+          <div class="section-header">
+            <span class="section-title">24/7 History Timeline</span>
+            <button id="refreshHistoryBtn" class="btn btn-secondary btn-sm" type="button">
+              Refresh
+            </button>
+          </div>
+
+          <div class="range-pills" id="rangePills">
+            <button class="range-btn" data-hours="1" type="button">1H</button>
+            <button class="range-btn" data-hours="6" type="button">6H</button>
+            <button class="range-btn active" data-hours="24" type="button">24H</button>
+            <button class="range-btn" data-hours="168" type="button">7D</button>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Distance</div>
+              <div id="statDistance" class="stat-val">0 km</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Points</div>
+              <div id="statPoints" class="stat-val">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Max Speed</div>
+              <div id="statSpeed" class="stat-val">0 km/h</div>
+            </div>
+          </div>
+
+          <div id="timelineList" class="timeline-list">
+            <div class="empty-state">Select a paired child to view location history.</div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="map-stage">
+        <div id="mapContainer" class="map-container">
+          <div id="mapHud" class="map-hud">
+            <div class="map-hud-title">
+              <span id="hudDot" class="dot"></span>
+              <span id="hudName">Select a child</span>
+            </div>
+            <div id="hudDetails" class="map-hud-sub">
+              <span>Add and pair a child device using the Child App to begin 24/7 tracking.</span>
+            </div>
+          </div>
+
+          <div class="map-controls">
+            <button id="zoomInBtn" class="map-ctrl-btn" title="Zoom in" type="button">+</button>
+            <button id="zoomOutBtn" class="map-ctrl-btn" title="Zoom out" type="button">−</button>
+            <button id="fitRouteBtn" class="map-ctrl-btn" title="Fit route" type="button">⌖</button>
+          </div>
+        </div>
+
+        <div class="playback-bar">
+          <button id="playPauseBtn" class="btn btn-secondary btn-sm" type="button" disabled>
+            Play Route
+          </button>
+          <select id="playbackSpeed" class="btn btn-secondary btn-sm" aria-label="Playback speed">
+            <option value="1">1x</option>
+            <option value="2">2x</option>
+            <option value="5">5x</option>
+          </select>
+          <input
+            id="playbackSlider"
+            class="playback-slider"
+            type="range"
+            min="0"
+            max="0"
+            value="0"
+            disabled
+          />
+          <button id="snapLiveBtn" class="btn btn-primary btn-sm" type="button" disabled>
+            Live
+          </button>
+          <span id="playbackTime" class="playback-time">--</span>
+        </div>
+      </section>
+    </main>
+
+    <!-- Add Child / Pairing Code Modal -->
+    <div id="addChildModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="section-header">
+          <h2 style="margin: 0; font-size: 1.1rem">Pair Child App</h2>
+          <button id="closeModalBtn" class="btn btn-secondary btn-sm" type="button">Close</button>
+        </div>
+
+        <form id="createChildForm">
+          <div class="field">
+            <label for="childNameInput">Child's Name</label>
+            <input id="childNameInput" type="text" placeholder="e.g. Leo" required />
+          </div>
+          <button class="btn btn-primary" style="width: 100%" type="submit">
+            Generate Pairing Code
+          </button>
+        </form>
+
+        <div id="pairingResult" class="hidden">
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px">
+            Open the separate <strong>Child Tracker App</strong> on the child's phone and enter
+            this 6-character code:
+          </p>
+          <div class="pairing-code-box">
+            <div id="modalPairingCode" class="pairing-code">------</div>
+            <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 6px">
+              Expires in 24 hours · Child App default: <span id="childAppOriginLabel"></span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button id="copyPairCodeBtn" class="btn btn-primary" style="flex: 1" type="button">
+              Copy Pairing Code
+            </button>
+            <button id="copyPairLinkBtn" class="btn btn-secondary" type="button">
+              Copy Child App Link
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/js/parent.js"></script>
+  </body>
+</html>
